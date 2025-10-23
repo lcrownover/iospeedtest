@@ -2,7 +2,10 @@ module github.com/lcrownover/iospeedtest
 
 go 1.25.3
 
-require github.com/vbauerster/mpb/v8 v8.10.2
+require (
+	github.com/alecthomas/kong v1.12.1
+	github.com/vbauerster/mpb/v8 v8.10.2
+)
 
 require (
 	github.com/VividCortex/ewma v1.2.0 // indirect

@@ -6,12 +6,13 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
 )
 
-func StartTransferBars(s Settings) {
+func StartTransferBars(s Settings) float64 {
 	var wg sync.WaitGroup
 	p := mpb.New(
 		mpb.WithWaitGroup(&wg),
@@ -19,13 +20,17 @@ func StartTransferBars(s Settings) {
 		mpb.WithAutoRefresh(),
 	)
 
+	sumGiBps := 0.0
+	perStreamGiBps := make([]float64, s.Streams)
+	var mu sync.Mutex
+
 	for i := range s.Streams {
 		// Create destination file
 		outputFileName := fmt.Sprintf("%s/iospeedtest_%d.txt", s.DestDir, i)
 		f, err := os.Create(outputFileName)
 		if err != nil {
 			fmt.Printf("error creating file %s: %v", outputFileName, err)
-			return
+			return 0.0
 		}
 		defer f.Close()
 
@@ -54,7 +59,16 @@ func StartTransferBars(s Settings) {
 		}()
 
 		wg.Go(func() {
-			_, err = io.Copy(f, proxyReader)
+			start := time.Now()
+			writtenBytes, err := io.Copy(f, proxyReader)
+			elapsed := time.Since(start).Seconds()
+			if elapsed > 0 {
+				speed := float64(writtenBytes) / elapsed
+				mu.Lock()
+				perStreamGiBps[i] = speed / (1024 * 1024 * 1024)
+				mu.Unlock()
+			}
+
 			if err != nil {
 				fmt.Printf("error copying to file %s: %v\n", outputFileName, err)
 				return
@@ -64,4 +78,10 @@ func StartTransferBars(s Settings) {
 	}
 
 	p.Wait()
+
+	for _, v := range perStreamGiBps {
+		sumGiBps += v
+	}
+
+	return sumGiBps
 }

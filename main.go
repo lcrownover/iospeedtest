@@ -1,10 +1,18 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
+
+	"github.com/alecthomas/kong"
 )
+
+type CLI struct {
+	DstDir  string `arg:"" name:"destination" short:"d" help:"Destination directory." type:"existingdir"`
+	Size    int64  `name:"gb" help:"How many gigabytes to shovel." default:"1"`
+	Streams int    `name:"streams" short:"s" help:"Number of streams." default:"1"`
+	Cleanup bool   `name:"cleanup" short:"c" help:"Cleanup destination files when finished."`
+}
 
 type Settings struct {
 	DestDir       string
@@ -29,17 +37,10 @@ func NewSettings(dstDir string, size int64, streams int, cleanup bool) Settings 
 // }
 
 func main() {
-	dstDir := flag.String("dstdir", "", "destination directory")
-	size := flag.Int64("size", 1, "file size in GB")
-	streams := flag.Int("streams", 1, "number of streams")
-	cleanup := flag.Bool("cleanup", false, "cleanup all test files when finished")
-	flag.Parse()
+	var cli CLI
+	kong.Parse(&cli, kong.Name("iospeedtest"), kong.Description("A simple tool to measure how fast bits fly to the destination directory."), kong.UsageOnError())
 
-	if *dstDir == "" {
-		fmt.Println("destination directory is required")
-		os.Exit(1)
-	}
-	dstFullPath, err := AbsPath(*dstDir)
+	dstFullPath, err := AbsPath(cli.DstDir)
 	if err != nil {
 		fmt.Println("error getting absolute path for destination directory:", err)
 		os.Exit(1)
@@ -50,13 +51,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	settings := NewSettings(dstFullPath, *size, *streams, *cleanup)
+	settings := NewSettings(dstFullPath, cli.Size, cli.Streams, cli.Cleanup)
 
 	fmt.Println("Destination directory:\t", settings.DestDir)
 	fmt.Println("Number of streams:\t", settings.Streams)
 	fmt.Println("Bytes per stream:\t", settings.FileSizeBytes)
 
-	StartTransferBars(settings)
+	sumSpeed := StartTransferBars(settings)
+	fmt.Println()
+	fmt.Println("Total data transferred:\t", fmt.Sprintf("%d GiB", settings.FileSizeGB*int64(settings.Streams)))
+	fmt.Println("Aggregate speed:\t", fmt.Sprintf("%.2f GiB/s", sumSpeed))
+	fmt.Println("Avg speed per stream:\t", fmt.Sprintf("%.2f GiB/s", sumSpeed/float64(settings.Streams)))
 
 	if settings.Cleanup {
 		errs := CleanupTestFiles(settings)
