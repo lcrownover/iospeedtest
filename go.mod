@@ -1,4 +1,4 @@
-module github.com/lcrownover/xferspeed
+module github.com/lcrownover/iospeedtest
 
 go 1.25.3
 
